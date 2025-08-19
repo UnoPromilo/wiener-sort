@@ -9,7 +9,7 @@ public interface IChunkRepository : IDisposable, IAsyncDisposable
     IEnumerable<Stream> GetChunks();
 }
 
-record ChunkData(long Offset, long Length);
+internal record ChunkData(long Offset, long Length);
 
 public class ChunkRepository : IChunkRepository
 {
@@ -38,12 +38,12 @@ public class ChunkRepository : IChunkRepository
         foreach (var entry in entries)
         {
             var len = entry.ToBytes(buffer);
-            _stream.Write(buffer, 0, len);
+            await _stream.WriteAsync(buffer.AsMemory(0, len), token);
         }
 
-        ArrayPool<byte>.Shared.Return(buffer);
-
         await _stream.FlushAsync(token);
+
+        ArrayPool<byte>.Shared.Return(buffer);
 
         var end = _stream.Position;
         _chunks.Add(new(start, end - start));
