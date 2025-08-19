@@ -1,8 +1,8 @@
-using System.Diagnostics;
+using System.Buffers;
 
 namespace WienerSort.Sort;
 
-public interface IChunkRepository
+public interface IChunkRepository : IDisposable, IAsyncDisposable
 {
     Task StoreChunkAsync(IEnumerable<Entry> entries, CancellationToken token = default);
     void SelectTempFile(FileInfo temporaryFile);
@@ -11,7 +11,7 @@ public interface IChunkRepository
 
 record ChunkData(long Offset, long Length);
 
-public class ChunkRepository : IChunkRepository, IDisposable, IAsyncDisposable
+public class ChunkRepository : IChunkRepository
 {
     private Stream? _stream;
     private FileInfo? _temporaryFile;
@@ -21,7 +21,7 @@ public class ChunkRepository : IChunkRepository, IDisposable, IAsyncDisposable
     {
         _temporaryFile = temporaryFile;
         _stream = new FileStream(_temporaryFile.FullName, FileMode.Create, FileAccess.ReadWrite, FileShare.Read,
-            1 << 20);
+            1 << 30);
     }
 
     public async Task StoreChunkAsync(IEnumerable<Entry> entries, CancellationToken token = default)
@@ -33,15 +33,18 @@ public class ChunkRepository : IChunkRepository, IDisposable, IAsyncDisposable
 
         var start = _stream.Position;
 
-        var count = 0;
+        var buffer = ArrayPool<byte>.Shared.Rent(Entry.Size);
+
         foreach (var entry in entries)
         {
-            count++;
-            var span = entry.ToSpan();
-            await _stream.WriteAsync(span.ToArray(), token);
+            var len = entry.ToBytes(buffer);
+            _stream.Write(buffer, 0, len);
         }
 
+        ArrayPool<byte>.Shared.Return(buffer);
+
         await _stream.FlushAsync(token);
+
         var end = _stream.Position;
         _chunks.Add(new(start, end - start));
     }

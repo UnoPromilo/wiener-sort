@@ -30,7 +30,7 @@ internal class CommandHandler(
         var chunkSize = (int)command.ChunkSizeInKb;
         var temporaryFile = command.TemporaryFile;
         chunkRepository.SelectTempFile(temporaryFile);
-        var entries = entryReader.ReadEntriesAsync(inputStream, chunkSize, token);
+        var entries = entryReader.ReadEntriesAsync(inputStream, 1 << 30, token);
         await chunkSorter.SortAsync(entries, chunkSize, token);
         await using var outputStream = GetOutputStream(command.Output);
         await chunkMerger.MergeAsync(outputStream, token);
@@ -46,6 +46,6 @@ internal class CommandHandler(
     {
         return target.Match(
             writeToStdOut => Console.OpenStandardOutput(),
-            fileInfo => fileInfo.Open(FileMode.Create, FileAccess.Write, FileShare.Read));
+            fileInfo => new FileStream(fileInfo.Name, FileMode.Create, FileAccess.Write, FileShare.Read, 1 << 30));
     }
 }

@@ -67,7 +67,6 @@ public unsafe struct Entry()
         } while (val != 0);
 
         var numLen = buffer.Length - pos;
-        buffer[..numLen].CopyTo(buffer[..numLen]); // ensure proper position
         var dst = 0;
         for (var i = 0; i < numLen; i++)
             buffer[dst++] = buffer[pos + i];
@@ -96,7 +95,6 @@ public sealed class EntryComparer : IComparer<Entry>
         return cmp != 0 ? cmp : x.Number.CompareTo(y.Number);
     }
 
-    // TODO is there any build in method?
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static unsafe int ComparePhrases(Entry x, Entry y)
     {

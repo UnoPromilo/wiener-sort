@@ -5,23 +5,23 @@ namespace WienerSort.Sort;
 
 public interface IEntryReader
 {
-    IAsyncEnumerable<Entry> ReadEntriesAsync(Stream stream, int chunkSize = 1 << 20,
+    IAsyncEnumerable<Entry> ReadEntriesAsync(Stream stream, int bufferSize,
         CancellationToken token = default); // TODO remove enumeration cancellation
 }
 
 public class EntryReader : IEntryReader
 {
-    public async IAsyncEnumerable<Entry> ReadEntriesAsync(Stream stream, int chunkSize = 1 << 20,
+    public async IAsyncEnumerable<Entry> ReadEntriesAsync(Stream stream, int bufferSize,
         [EnumeratorCancellation] CancellationToken token = default)
     {
-        var buffer = ArrayPool<byte>.Shared.Rent(chunkSize);
-        chunkSize = buffer.Length; // Rented buffer probably is bigger so it is worth to use it whole
+        var buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+        bufferSize = buffer.Length; // Rented buffer probably is bigger so it is worth to use it whole
         var leftover = 0;
 
         try
         {
             int bytesRead;
-            while ((bytesRead = await stream.ReadAsync(buffer.AsMemory(leftover, chunkSize - leftover), token)) > 0)
+            while ((bytesRead = await stream.ReadAsync(buffer.AsMemory(leftover, bufferSize - leftover), token)) > 0)
             {
                 var start = 0;
 
@@ -46,7 +46,7 @@ public class EntryReader : IEntryReader
                 leftover = bytesRead + leftover - start;
                 if (leftover <= 0) continue;
 
-                if (leftover == chunkSize)
+                if (leftover == bufferSize)
                 {
                     throw new("Single line exceed chunk size");
                 }

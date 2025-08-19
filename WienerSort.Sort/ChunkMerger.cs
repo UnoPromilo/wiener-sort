@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace WienerSort.Sort;
 
 public interface IChunkMerger
@@ -10,10 +12,10 @@ public class ChunkMerger(IComparer<Entry> comparer, IEntryReader entryReader, IC
 {
     public async Task MergeAsync(Stream output, CancellationToken token = default)
     {
-        // TODO pass chunk size
         var chunks = chunkRepository.GetChunks().ToList();
         var enumerators = chunks
-            .Select(chunk => entryReader.ReadEntriesAsync(chunk, token: token).GetAsyncEnumerator(token)).ToList();
+            .Select(chunk => entryReader.ReadEntriesAsync(chunk, 1 << 20, token: token).GetAsyncEnumerator(token))
+            .ToList();
         var priorityQueue = new PriorityQueue<(Entry entry, int enumeratorId), Entry>(comparer);
         try
         {
@@ -27,16 +29,24 @@ public class ChunkMerger(IComparer<Entry> comparer, IEntryReader entryReader, IC
             }
 
 
-            while (priorityQueue.Count > 0)
+            var buffer = ArrayPool<byte>.Shared.Rent(Entry.Size);
+            try
             {
-                var (entry, enumeratorId) = priorityQueue.Dequeue();
-                // TODO fix mess with ToSpan ToArray
-                await output.WriteAsync(entry.ToSpan().ToArray(), token);
-                var enumerator = enumerators[enumeratorId];
-                if (await enumerator.MoveNextAsync())
+                while (priorityQueue.Count > 0)
                 {
-                    priorityQueue.Enqueue((enumerator.Current, enumeratorId), enumerator.Current);
+                    var (entry, enumeratorId) = priorityQueue.Dequeue();
+                    var len = entry.ToBytes(buffer);
+                    await output.WriteAsync(buffer.AsMemory(0, len), token);
+                    var enumerator = enumerators[enumeratorId];
+                    if (await enumerator.MoveNextAsync())
+                    {
+                        priorityQueue.Enqueue((enumerator.Current, enumeratorId), enumerator.Current);
+                    }
                 }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
             }
         }
         finally

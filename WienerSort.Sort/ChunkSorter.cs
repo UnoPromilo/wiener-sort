@@ -76,7 +76,7 @@ public class ChunkSorter(IComparer<Entry> comparer, IChunkRepository repository)
                 frozenCount += last + 1;
             }
 
-            await repository.StoreChunkAsync(heap, token);
+            await repository.StoreChunkAsync(currentRun, token);
         }
     }
 
