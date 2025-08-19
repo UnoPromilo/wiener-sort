@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace WienerSort.Sort;
 
 public interface IChunkRepository
@@ -31,8 +33,10 @@ public class ChunkRepository : IChunkRepository, IDisposable, IAsyncDisposable
 
         var start = _stream.Position;
 
+        var count = 0;
         foreach (var entry in entries)
         {
+            count++;
             var span = entry.ToSpan();
             await _stream.WriteAsync(span.ToArray(), token);
         }

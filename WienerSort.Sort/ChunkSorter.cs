@@ -1,31 +1,31 @@
-using System.Runtime.CompilerServices;
-
 namespace WienerSort.Sort;
 
 public interface IChunkSorter
 {
-    IAsyncEnumerable<List<Entry>> SortAsync(
+    Task SortAsync(
         IAsyncEnumerable<Entry> source,
         int chunkSizeInKb,
         CancellationToken cancellationToken = default);
 }
 
-public class ChunkSorter(IComparer<Entry> comparer) : IChunkSorter
+public class ChunkSorter(IComparer<Entry> comparer, IChunkRepository repository) : IChunkSorter
 {
-    public async IAsyncEnumerable<List<Entry>> SortAsync(IAsyncEnumerable<Entry> enumerable,
-        int chunkSizeInKb,
-        [EnumeratorCancellation] CancellationToken token = default)
+    public async Task SortAsync(IAsyncEnumerable<Entry> enumerable,
+        int chunkSizeInKb, CancellationToken token = default)
     {
-        var chunkSize = (chunkSizeInKb * 1024) / Entry.Size;
+        var chunkSize = chunkSizeInKb * 1024 / Entry.Size;
         if (chunkSize <= 0) throw new ArgumentException("Chunk size too small");
 
         await using var source = enumerable.GetAsyncEnumerator(token);
 
         var heap = new Entry[chunkSize];
+        var currentRun = new List<Entry>(chunkSize);
+
         var frozenCount = 0;
 
         while (true)
         {
+            currentRun.Clear();
             var last = frozenCount - 1;
             frozenCount = 0;
             while (last + 1 < chunkSize && await source.MoveNextAsync())
@@ -35,10 +35,9 @@ public class ChunkSorter(IComparer<Entry> comparer) : IChunkSorter
                 heap[last] = source.Current;
             }
 
-            if (last < 0) yield break;
+            if (last < 0) break;
 
             BuildMinHeap(heap, last);
-            var currentRun = new List<Entry>(capacity: chunkSize);
 
             while (last >= 0 && currentRun.Count < chunkSize)
             {
@@ -77,7 +76,7 @@ public class ChunkSorter(IComparer<Entry> comparer) : IChunkSorter
                 frozenCount += last + 1;
             }
 
-            yield return currentRun;
+            await repository.StoreChunkAsync(heap, token);
         }
     }
 

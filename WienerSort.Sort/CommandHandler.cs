@@ -30,14 +30,8 @@ internal class CommandHandler(
         var chunkSize = (int)command.ChunkSizeInKb;
         var temporaryFile = command.TemporaryFile;
         chunkRepository.SelectTempFile(temporaryFile);
-
-
         var entries = entryReader.ReadEntriesAsync(inputStream, chunkSize, token);
-        await foreach (var chunk in chunkSorter.SortAsync(entries, chunkSize, token))
-        {
-            await chunkRepository.StoreChunkAsync(chunk, token);
-        }
-
+        await chunkSorter.SortAsync(entries, chunkSize, token);
         await using var outputStream = GetOutputStream(command.Output);
         await chunkMerger.MergeAsync(outputStream, token);
     }
