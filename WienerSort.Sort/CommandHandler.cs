@@ -30,29 +30,16 @@ internal class CommandHandler(
         var chunkSize = (int)command.ChunkSizeInKb;
         var temporaryFile = command.TemporaryFile;
         chunkRepository.SelectTempFile(temporaryFile);
-        // TODO batch should be correlated with read chunk size?
-        var batch = new List<Entry>(100_000);
-        await foreach (var line in entryReader.ReadEntriesAsync(inputStream, chunkSize, token))
-        {
-            batch.Add(line);
-            if (batch.Count != batch.Capacity) continue;
-            await SortWriteAndCleanAsync(batch, token);
-        }
 
-        if (batch.Count > 0)
+
+        var entries = entryReader.ReadEntriesAsync(inputStream, chunkSize, token);
+        await foreach (var chunk in chunkSorter.SortAsync(entries, chunkSize, token))
         {
-            await SortWriteAndCleanAsync(batch, token);
+            await chunkRepository.StoreChunkAsync(chunk, token);
         }
 
         await using var outputStream = GetOutputStream(command.Output);
         await chunkMerger.MergeAsync(outputStream, token);
-    }
-
-    private async Task SortWriteAndCleanAsync(List<Entry> entries, CancellationToken token)
-    {
-        chunkSorter.Sort(entries);
-        await chunkRepository.StoreChunkAsync(entries, token);
-        entries.Clear();
     }
 
     private static Stream GetInputStream(OneOf<ReadFromStdIn, FileInfo> target)

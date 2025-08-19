@@ -9,6 +9,8 @@ public unsafe struct Entry()
     public fixed byte Phrase[256];
     public int PhraseLength = 0;
 
+    public static int Size => sizeof(Entry);
+
     public override string ToString()
     {
         fixed (byte* p = Phrase)
