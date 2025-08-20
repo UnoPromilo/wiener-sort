@@ -10,6 +10,7 @@ internal record ParsedCommand(
     OneOf<ReadFromStdIn, FileInfo> Input,
     OneOf<WriteToStdOut, FileInfo> Output,
     uint ChunkSizeInKb,
+    uint JobsCount,
     FileInfo TemporaryFile);
 
 internal interface ICommandHandler
@@ -29,9 +30,10 @@ internal class CommandHandler(
         await using var inputStream = GetInputStream(command.Input);
         var chunkSize = (int)command.ChunkSizeInKb;
         var temporaryFile = command.TemporaryFile;
+        var jobsCount = (int)command.JobsCount;
         chunkRepository.SelectTempFile(temporaryFile);
-        var entries = entryReader.ReadEntriesAsync(inputStream, 1 << 30, token);
-        await chunkSorter.SortAsync(entries, chunkSize, token);
+        var entries = entryReader.ReadEntriesAsync(inputStream, 1 << 20, token);
+        await chunkSorter.SortAsync(entries, chunkSize, jobsCount, token);
         await using var outputStream = GetOutputStream(command.Output);
         await chunkMerger.MergeAsync(outputStream, token);
     }

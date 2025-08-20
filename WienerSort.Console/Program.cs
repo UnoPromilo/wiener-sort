@@ -11,7 +11,7 @@ var serviceCollection = new ServiceCollection()
 var serviceProvider = serviceCollection.BuildServiceProvider();
 
 
-var rootCommand = new RootCommand();
+RootCommand rootCommand = new();
 foreach (var command in serviceProvider.GetServices<Command>())
 {
     rootCommand.Add(command);

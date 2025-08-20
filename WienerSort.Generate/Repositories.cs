@@ -4,7 +4,6 @@ namespace WienerSort.Generate;
 
 public interface IRepository<out T>
 {
-    // TODO remove CancellationToken from interface
     IAsyncEnumerable<Sentence> GetAll(CancellationToken token = default);
 }
 

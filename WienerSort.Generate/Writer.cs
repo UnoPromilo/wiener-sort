@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace WienerSort.Generate;
 
 internal interface IWriter
@@ -11,19 +13,17 @@ public class Writer(IRepository<Sentence> sentenceRepository) : IWriter
     {
         await using var writer = new StreamWriter(stream, bufferSize: 1 << 20);
         var sentences = await sentenceRepository.GetAll(token).ToListAsync(token);
-        var written = 0UL;
-        var targetBytes = targetOutputSizeInMb * 1024UL * 1024UL;
-        while (written < targetBytes)
+        var targetBytes = (long)(targetOutputSizeInMb * 1024UL * 1024UL);
+        var builder = new StringBuilder(264);
+        while (writer.BaseStream.Position < targetBytes)
         {
-            //token.ThrowIfCancellationRequested();
+            token.ThrowIfCancellationRequested();
 
             var key = Random.Shared.Next(1, 2137420);
             // To increase chance of getting the same sentence twice
-            var idx = (int)(Math.Pow(Random.Shared.NextDouble(), 4) * sentences.Count);
-            // TODO optimize
-            var line = $"{key}. {sentences[idx]}{Environment.NewLine}";
-            await writer.WriteAsync(line);
-            written += (ulong)writer.Encoding.GetByteCount(line);
+            var index = (int)(Math.Pow(Random.Shared.NextDouble(), 4) * sentences.Count);
+            builder.Clear().Append(key).Append(". ").Append(sentences[index]).AppendLine();
+            await writer.WriteAsync(builder, token);
         }
     }
 }

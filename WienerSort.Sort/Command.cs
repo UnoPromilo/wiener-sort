@@ -42,6 +42,12 @@ public class SortCommand : Command
         Description = "Path to the output file",
     };
 
+    private Option<uint> ParallelJobsCount { get; } = new("--parallel-jobs-count", "-j")
+    {
+        Description = "The number of parallel jobs",
+        DefaultValueFactory = _ => (uint)Environment.ProcessorCount,
+    };
+
     public SortCommand(IServiceProvider serviceProvider) : base("sort", "Sort file")
     {
         _serviceProvider = serviceProvider;
@@ -51,6 +57,7 @@ public class SortCommand : Command
         Options.Add(TemporaryPathOption);
         Options.Add(WriteToStdOutOption);
         Options.Add(OutputPathOption);
+        Options.Add(ParallelJobsCount);
 
         Validators.Add(result =>
         {
@@ -77,6 +84,7 @@ public class SortCommand : Command
         var temporaryPath = parseResult.GetRequiredValue(TemporaryPathOption);
         var writeToStdOut = parseResult.GetRequiredValue(WriteToStdOutOption);
         var outputPath = parseResult.GetRequiredValue(OutputPathOption);
+        var jobsCount = parseResult.GetRequiredValue(ParallelJobsCount);
         if (inputPath == null && readFromStdIn == false)
         {
             throw new InvalidOperationException("Input must be specified");
@@ -90,7 +98,7 @@ public class SortCommand : Command
         var command = new ParsedCommand(
             readFromStdIn ? new ReadFromStdIn() : inputPath!,
             writeToStdOut ? new WriteToStdOut() : outputPath!,
-            chunkSize, temporaryPath);
+            chunkSize, jobsCount, temporaryPath);
 
         await scope.ServiceProvider.GetRequiredService<ICommandHandler>().HandleAsync(command, token);
     }

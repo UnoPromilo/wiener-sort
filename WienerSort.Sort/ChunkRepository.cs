@@ -4,7 +4,7 @@ namespace WienerSort.Sort;
 
 public interface IChunkRepository : IDisposable, IAsyncDisposable
 {
-    Task StoreChunkAsync(IEnumerable<Entry> entries, CancellationToken token = default);
+    Task StoreChunkAsync(List<Entry> entries, CancellationToken token = default);
     void SelectTempFile(FileInfo temporaryFile);
     IEnumerable<Stream> GetChunks();
 }
@@ -20,11 +20,16 @@ public class ChunkRepository : IChunkRepository
     public void SelectTempFile(FileInfo temporaryFile)
     {
         _temporaryFile = temporaryFile;
-        _stream = new FileStream(_temporaryFile.FullName, FileMode.Create, FileAccess.ReadWrite, FileShare.Read,
-            1 << 30);
+        _stream = new FileStream(
+            _temporaryFile.FullName,
+            FileMode.Create,
+            FileAccess.ReadWrite,
+            FileShare.Read,
+            1 << 20,
+            useAsync: true);
     }
 
-    public async Task StoreChunkAsync(IEnumerable<Entry> entries, CancellationToken token = default)
+    public async Task StoreChunkAsync(List<Entry> entries, CancellationToken token = default)
     {
         if (_stream == null)
         {
@@ -33,17 +38,28 @@ public class ChunkRepository : IChunkRepository
 
         var start = _stream.Position;
 
-        var buffer = ArrayPool<byte>.Shared.Rent(Entry.Size);
-
-        foreach (var entry in entries)
+        var buffer = ArrayPool<byte>.Shared.Rent(1 << 20);
+        try
         {
-            var len = entry.ToBytes(buffer);
-            await _stream.WriteAsync(buffer.AsMemory(0, len), token);
+            var size = buffer.Length;
+            var offset = 0;
+
+            foreach (var entry in entries)
+            {
+                offset += entry.ToBytes(buffer.AsSpan(offset, size - offset));
+                if (offset + Entry.Size <= size) continue;
+                await _stream.WriteAsync(buffer.AsMemory(0, offset), token);
+                offset = 0;
+            }
+
+            await _stream.WriteAsync(buffer.AsMemory(0, offset), token);
+            await _stream.FlushAsync(token);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
 
-        await _stream.FlushAsync(token);
-
-        ArrayPool<byte>.Shared.Return(buffer);
 
         var end = _stream.Position;
         _chunks.Add(new(start, end - start));
@@ -58,10 +74,18 @@ public class ChunkRepository : IChunkRepository
 
         foreach (var chunk in _chunks)
         {
-            var stream = _temporaryFile.Open(FileMode.Open, FileAccess.Read, FileShare.Read);
+            var stream = new FileStream(
+                _temporaryFile.FullName,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 1 << 16,
+                useAsync: true);
+
             yield return new SubStream(stream, chunk.Offset, chunk.Length);
         }
     }
+
 
     public void Dispose()
     {

@@ -39,7 +39,6 @@ public class EntryReader : IEntryReader
 
                     var line = notProcessedBufferSpan[..length];
                     yield return Entry.FromSpan(line);
-
                     start += length + 1;
                 }
 
