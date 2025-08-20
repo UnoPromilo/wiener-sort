@@ -5,7 +5,7 @@ namespace WienerSort.Sort;
 
 public class SortCommand : Command
 {
-    private const int DefaultChunkSize = 1 << 14; // 16MB
+    private const int DefaultChunkSize = 1 << 16; // 64MB
     private readonly IServiceProvider _serviceProvider;
 
     private Option<bool> ReadFromStdInOption { get; } = new("--read-from-std-in", "-p")

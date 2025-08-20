@@ -1,20 +1,23 @@
 using System.Buffers;
+using System.Runtime.CompilerServices;
 
 namespace WienerSort.Sort;
 
 public interface IChunkMerger
 {
-    Task MergeAsync(Stream output, CancellationToken token = default);
+    IAsyncEnumerable<Entry> MergeAsync(List<Stream> chunks, CancellationToken token = default);
 }
 
-public class ChunkMerger(IComparer<Entry> comparer, IEntryReader entryReader, IChunkRepository chunkRepository)
+public class ChunkMerger(IComparer<Entry> comparer, IEntryReader entryReader)
     : IChunkMerger
 {
-    public async Task MergeAsync(Stream output, CancellationToken token = default)
+    // TODO allow multi pass merge to support large files
+    // TODO refactor
+    public async IAsyncEnumerable<Entry> MergeAsync(List<Stream> chunks,
+        [EnumeratorCancellation] CancellationToken token = default)
     {
-        var chunks = chunkRepository.GetChunks().ToList();
         var enumerators = chunks
-            .Select(chunk => entryReader.ReadEntriesAsync(chunk, 1 << 20, token: token).GetAsyncEnumerator(token))
+            .Select(chunk => entryReader.ReadEntriesAsync(chunk, 1 << 16, token: token).GetAsyncEnumerator(token))
             .ToList();
         var priorityQueue = new PriorityQueue<(Entry entry, int enumeratorId), Entry>(comparer);
         try
@@ -35,8 +38,7 @@ public class ChunkMerger(IComparer<Entry> comparer, IEntryReader entryReader, IC
                 while (priorityQueue.Count > 0)
                 {
                     var (entry, enumeratorId) = priorityQueue.Dequeue();
-                    var len = entry.ToBytes(buffer);
-                    await output.WriteAsync(buffer.AsMemory(0, len), token);
+                    yield return entry;
                     var enumerator = enumerators[enumeratorId];
                     if (await enumerator.MoveNextAsync())
                     {
@@ -60,8 +62,6 @@ public class ChunkMerger(IComparer<Entry> comparer, IEntryReader entryReader, IC
             {
                 await chunk.DisposeAsync();
             }
-
-            await output.FlushAsync(token);
         }
     }
 }

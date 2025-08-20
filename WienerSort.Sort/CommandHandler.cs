@@ -35,7 +35,12 @@ internal class CommandHandler(
         var entries = entryReader.ReadEntriesAsync(inputStream, 1 << 20, token);
         await chunkSorter.SortAsync(entries, chunkSize, jobsCount, token);
         await using var outputStream = GetOutputStream(command.Output);
-        await chunkMerger.MergeAsync(outputStream, token);
+        var buffer = new byte[Entry.Size];
+        await foreach (var entry in chunkMerger.MergeAsync(chunkRepository.GetChunks().ToList(), token))
+        {
+            var len = entry.ToBytes(buffer);
+            await outputStream.WriteAsync(buffer.AsMemory(0, len), token);
+        }
     }
 
     private static Stream GetInputStream(OneOf<ReadFromStdIn, FileInfo> target)
